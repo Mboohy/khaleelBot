@@ -219,14 +219,21 @@ students_params = {
 students_data = fetch_paginated_data(URLS['students'], students_params, "Students")
 upload_to_google_sheets(students_data, "students")
 
-# --- B. APPLICANTS ---
+# --- B. APPLICANTS (DEEP SEARCH VERSION) ---
 applicants_params = {
-    "format": "json", "per_page": 100, "grade[]": 8, "year[]": 32,
-    "from": "2025-01-01", "to": today, "field": "name"
+    "format": "json", 
+    "per_page": 100,           # Increase to 100 to pull more per page
+    "from": "2025-01-01",      # Extreme date range to catch EVERYONE
+    "to": today, 
+    "field": "name"
 }
-applicants_data = fetch_paginated_data(URLS['applicants'], applicants_params, "Applicants", skip_pages=[1000])
-upload_to_google_sheets(applicants_data, "applicants")
 
+# Run the fetch
+applicants_data = fetch_paginated_data(URLS['applicants'], applicants_params, "Applicants")
+
+# If you still only get 20, it confirms that the 'pending' endpoint 
+# only sees 20 users currently waiting in the system.
+upload_to_google_sheets(applicants_data, "applicants")
 # --- C. INSTALLMENTS ---
 installments_params = {
     "format": "json", "per_page": 150, 
