@@ -222,10 +222,9 @@ upload_to_google_sheets(students_data, "students")
 # --- B. APPLICANTS (DEEP SEARCH VERSION) ---
 applicants_params = {
     "format": "json", 
-    "per_page": 100,           # Increase to 100 to pull more per page
+    "per_page": 20,           # Increase to 100 to pull more per page
     "from": "2025-01-01",      # Extreme date range to catch EVERYONE
-    "to": today, 
-    "field": "name"
+    "to": today
 }
 
 # Run the fetch
