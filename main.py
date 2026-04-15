@@ -221,7 +221,7 @@ upload_to_google_sheets(students_data, "students")
 
 # --- B. APPLICANTS ---
 applicants_params = {
-    "format": "json", "per_page": 20, 
+    "format": "json", "per_page": 100, "grade[]": 8, "year[]": 32,
     "from": "2025-01-01", "to": today, "field": "name"
 }
 applicants_data = fetch_paginated_data(URLS['applicants'], applicants_params, "Applicants", skip_pages=[1000])
