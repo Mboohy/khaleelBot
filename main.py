@@ -146,31 +146,26 @@ def fetch_paginated_data(url, params, label, skip_pages=None, max_pages=1000):
 
     print(f"✅ Finished {label}. Grand Total: {len(all_data)}")
     return all_data
-
+    
 # ==========================================
-# 4. MASTER UPLOAD FUNCTION (BULLETPROOF VERSION)
+# 4. MASTER UPLOAD FUNCTION (QUOTA-SAFE)
 # ==========================================
 
 def upload_to_google_sheets(data, worksheet_name):
-    """Reliable Google Sheets upload that forces all data to be text-safe."""
+    """Reliable Google Sheets upload that respects API limits and forces text-safety."""
     if not data:
         print(f"🔄 No data to upload for {worksheet_name}. Skipping.")
         return
 
     try:
-        # 1. Convert to DataFrame
-        df = pd.DataFrame(data)
-        
-        # 2. Force EVERYTHING to be a string (This prevents gspread crashes from nested JSON dicts/lists)
-        df = df.astype(str)
-        
-        # 3. Clean up the ugly string versions of empty data
+        # 1. Convert to DataFrame and force strings (prevents nested data crashes)
+        df = pd.DataFrame(data).astype(str)
         df = df.replace({'nan': '', 'None': '', '<NA>': '', 'NaT': ''})
 
         print(f"\n📤 Uploading {len(df)} records to '{worksheet_name}'...")
         sheet = gc.open_by_key(GOOGLE_SHEET_ID)
 
-        # 4. Worksheet handling
+        # 2. Worksheet handling
         try:
             worksheet = sheet.worksheet(worksheet_name)
             worksheet.clear()
@@ -181,10 +176,11 @@ def upload_to_google_sheets(data, worksheet_name):
                 cols=max(20, len(df.columns)+5)
             )
 
-        # 5. Batch upload
-        batch_size = 150
+        # 3. Quota-Safe Batch Upload (Bigger batches, slight delay)
+        batch_size = 2500  # Increased heavily to minimize API calls
         for i in range(0, len(df), batch_size):
             batch = df.iloc[i:i + batch_size]
+            
             if i == 0:
                 worksheet.update(
                     [df.columns.tolist()] + batch.values.tolist(),
@@ -196,13 +192,17 @@ def upload_to_google_sheets(data, worksheet_name):
                     batch.values.tolist(),
                     value_input_option='USER_ENTERED'
                 )
+                
             print(f"⬆️ Uploaded rows {i+1}-{min(i+batch_size, len(df))}")
+            
+            # Google API Quota Protection (Max 60 requests per minute)
+            time.sleep(1.5) 
 
         print(f"✅ Successfully updated worksheet: '{worksheet_name}'")
 
     except Exception as e:
-        # THIS is the crucial error message if it fails again!
-        print(f"❌ Upload error for {worksheet_name}: {str(e)}")
+        # Using repr(e) forces Python to print the raw error even if the text is empty
+        print(f"❌ Upload error for {worksheet_name}: {repr(e)}")
 
 # ==========================================
 # 5. PIPELINE EXECUTION
