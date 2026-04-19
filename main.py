@@ -202,7 +202,7 @@ upload_to_google_sheets(students_data, "students")
 applicants_params = {
     "format": "json", 
     "per_page": 100, 
-    "from": "2020-01-01",  # Extreme date range to bypass date clipping
+    "from": "2025-01-01",  # Extreme date range to bypass date clipping
     "to": today 
     # Notice "field": "name" is removed here to prevent 'preview mode'
 }
