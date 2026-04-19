@@ -148,26 +148,29 @@ def fetch_paginated_data(url, params, label, skip_pages=None, max_pages=1000):
     return all_data
 
 # ==========================================
-# 4. MASTER UPLOAD FUNCTION
+# 4. MASTER UPLOAD FUNCTION (BULLETPROOF VERSION)
 # ==========================================
 
 def upload_to_google_sheets(data, worksheet_name):
-    """Reliable Google Sheets upload with smart handling and batching"""
+    """Reliable Google Sheets upload that forces all data to be text-safe."""
     if not data:
         print(f"🔄 No data to upload for {worksheet_name}. Skipping.")
         return
 
     try:
+        # 1. Convert to DataFrame
         df = pd.DataFrame(data)
-        # Clean data to prevent Google Sheets API errors
-        df = (df.replace([np.inf, -np.inf, None], np.nan)
-              .fillna('')
-              .applymap(lambda x: str(x)[:50000] if pd.notna(x) else ''))
+        
+        # 2. Force EVERYTHING to be a string (This prevents gspread crashes from nested JSON dicts/lists)
+        df = df.astype(str)
+        
+        # 3. Clean up the ugly string versions of empty data
+        df = df.replace({'nan': '', 'None': '', '<NA>': '', 'NaT': ''})
 
         print(f"\n📤 Uploading {len(df)} records to '{worksheet_name}'...")
         sheet = gc.open_by_key(GOOGLE_SHEET_ID)
 
-        # Worksheet handling
+        # 4. Worksheet handling
         try:
             worksheet = sheet.worksheet(worksheet_name)
             worksheet.clear()
@@ -178,7 +181,7 @@ def upload_to_google_sheets(data, worksheet_name):
                 cols=max(20, len(df.columns)+5)
             )
 
-        # Batch upload
+        # 5. Batch upload
         batch_size = 150
         for i in range(0, len(df), batch_size):
             batch = df.iloc[i:i + batch_size]
@@ -198,6 +201,7 @@ def upload_to_google_sheets(data, worksheet_name):
         print(f"✅ Successfully updated worksheet: '{worksheet_name}'")
 
     except Exception as e:
+        # THIS is the crucial error message if it fails again!
         print(f"❌ Upload error for {worksheet_name}: {str(e)}")
 
 # ==========================================
