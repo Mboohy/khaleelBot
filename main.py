@@ -23,7 +23,7 @@ if datetime.now().strftime('%Y-%m-%d') > END_DATE:
 INSTITUTE_NAME = "Albuhuti"
 BASE_URL = "https://api.albuhutifiqh.com"
 LOGIN_URL = f"{BASE_URL}/api/login"
-GOOGLE_SHEET_ID = "14gzPMTDZO-CZpMJCy1u5v6BN3wg6r4sjnaoq6vX2G-c"
+GOOGLE_SHEET_ID = "1kSAzz5y5XZhvsmRDTEb7_jk3mo2_eJFjMTCrOhaDrN8"
 ADMIN_EMAIL = "admin@albuhutifiqh.com"
 ADMIN_PASSWORD = "DzMzn@$D3#Wg}z#t"
 
@@ -75,17 +75,16 @@ def authenticate_api():
 token = authenticate_api()
 
 # ==========================================
-# 3. DATA FETCHING FUNCTIONS
+# 3. DATA FETCHING FUNCTION (BRUTE FORCE)
 # ==========================================
 
 def fetch_paginated_data(url, params, label, skip_pages=None):
-    """Generic function to handle pagination and retries for all endpoints"""
+    """Fetches data and ignores API 'last_page' lies by running until empty."""
     all_data = []
     page = 1
-    max_retries = 3
     skip_pages = skip_pages or []
 
-    print(f"\n📥 Fetching {label} data...")
+    print(f"\n📥 [BRUTE FORCE] Fetching {label}...")
     
     while True:
         if page in skip_pages:
@@ -94,63 +93,43 @@ def fetch_paginated_data(url, params, label, skip_pages=None):
             continue
 
         params['page'] = page
-        success = False
-
-        for attempt in range(max_retries):
-            try:
-                response = requests.get(
-                    url,
-                    headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
-                    params=params,
-                    timeout=30
-                )
-                response.raise_for_status()
-                success = True
-                break
-            except requests.exceptions.RequestException as e:
-                wait_time = (2 ** attempt) * 2
-                print(f"Attempt {attempt + 1} failed on page {page}. Retrying in {wait_time}s...")
-                time.sleep(wait_time)
-
-        if not success:
-            if page >= 60:  # Auto-skip threshold to prevent crashing on deep pages
-                print(f"⏭️ Auto-skipping page {page} due to persistent errors")
-                page += 1
-                continue
-            else:
-                print(f"❌ Stopping {label} fetch due to persistent errors on page {page}")
-                break
-
-        data = response.json()
         
-        # Handle varying API response structures
-        if 'data' in data:
-            if isinstance(data['data'], list):
-                records = data['data']
-            elif isinstance(data['data'], dict) and 'data' in data['data']:
-                records = data['data']['data']
-            else:
-                records = []
-        else:
-            records = []
+        try:
+            response = requests.get(
+                url,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                params=params,
+                timeout=30
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # 1. Dig for the records (handles nested 'data' or 'data.data')
+            records = data.get('data', [])
+            if isinstance(records, dict):
+                records = records.get('data', [])
+            
+            # 2. Check if we actually got anything
+            if not records or len(records) == 0:
+                print(f"🏁 Reached the end at Page {page} (Empty Response).")
+                break
 
-        valid_records = [r for r in records if isinstance(r, dict)]
-        all_data.extend(valid_records)
+            all_data.extend(records)
+            print(f"📄 Page {page}: Found {len(records)} records (Total so far: {len(all_data)})")
+            
+            # 3. Safety break: If API repeats the same data on a loop, stop
+            if len(all_data) > 20 and records[0] == all_data[-(len(records)+1)]:
+                print("⚠️ API is repeating data. Stopping to prevent loop.")
+                break
 
-        if not records:
+            page += 1
+            time.sleep(0.5)
+
+        except Exception as e:
+            print(f"❌ Error on page {page}: {str(e)}")
             break
 
-        print(f"📄 Page {page}: Found {len(valid_records)} records (Total: {len(all_data)})")
-
-        # Pagination control
-        last_page = data.get('last_page', 1)
-        if page >= last_page:
-            break
-
-        page += 1
-        time.sleep(0.5)
-
-    print(f"✅ Finished fetching {label}. Total records: {len(all_data)}")
+    print(f"✅ Finished {label}. Grand Total: {len(all_data)}")
     return all_data
 
 # ==========================================
@@ -219,20 +198,17 @@ students_params = {
 students_data = fetch_paginated_data(URLS['students'], students_params, "Students")
 upload_to_google_sheets(students_data, "students")
 
-# --- B. APPLICANTS (DEEP SEARCH VERSION) ---
+# --- B. APPLICANTS (Deep Search) ---
 applicants_params = {
     "format": "json", 
-    "per_page": 20,           # Increase to 100 to pull more per page
-    "from": "2025-01-01",      # Extreme date range to catch EVERYONE
-    "to": today
+    "per_page": 100, 
+    "from": "2020-01-01",  # Extreme date range to bypass date clipping
+    "to": today 
+    # Notice "field": "name" is removed here to prevent 'preview mode'
 }
-
-# Run the fetch
-applicants_data = fetch_paginated_data(URLS['applicants'], applicants_params, "Applicants")
-
-# If you still only get 20, it confirms that the 'pending' endpoint 
-# only sees 20 users currently waiting in the system.
+applicants_data = fetch_paginated_data(URLS['applicants'], applicants_params, "Applicants", skip_pages=[1000])
 upload_to_google_sheets(applicants_data, "applicants")
+
 # --- C. INSTALLMENTS ---
 installments_params = {
     "format": "json", "per_page": 150, 
@@ -249,6 +225,13 @@ cash_params = {
 cash_data = fetch_paginated_data(URLS['payments'], cash_params, "Cash")
 upload_to_google_sheets(cash_data, "cash")
 
+# --- E. SHEET TIMESTAMP SYNC ---
+try:
+    log_sheet = gc.open_by_key(GOOGLE_SHEET_ID).get_worksheet(0)
+    log_sheet.update('Z1', f"Last Sync: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("\n✓ Timestamp updated in Sheet (Cell Z1)")
+except Exception as e:
+    print(f"\n⚠️ Could not update timestamp: {str(e)}")
 
 print("\n==========================================")
 print(f"🎉 Pipeline Complete! End Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
