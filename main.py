@@ -75,18 +75,20 @@ def authenticate_api():
 token = authenticate_api()
 
 # ==========================================
-# 3. DATA FETCHING FUNCTION (BRUTE FORCE)
+# 3. DATA FETCHING FUNCTION (SAFE VERSION)
 # ==========================================
 
-def fetch_paginated_data(url, params, label, skip_pages=None):
-    """Fetches data and ignores API 'last_page' lies by running until empty."""
+# Increased max_pages to 5000 (Allows for 100,000+ records at 20 per page)
+def fetch_paginated_data(url, params, label, skip_pages=None, max_pages=1000):
+    """Fetches data with strict infinite-loop protection and high capacity."""
     all_data = []
     page = 1
     skip_pages = skip_pages or []
+    previous_batch = [] 
 
-    print(f"\n📥 [BRUTE FORCE] Fetching {label}...")
+    print(f"\n📥 Fetching {label}...")
     
-    while True:
+    while page <= max_pages: 
         if page in skip_pages:
             print(f"⏭️ Skipping page {page}")
             page += 1
@@ -104,22 +106,31 @@ def fetch_paginated_data(url, params, label, skip_pages=None):
             response.raise_for_status()
             data = response.json()
             
-            # 1. Dig for the records (handles nested 'data' or 'data.data')
+            # Dig for the records
             records = data.get('data', [])
             if isinstance(records, dict):
                 records = records.get('data', [])
             
-            # 2. Check if we actually got anything
+            # 1. EMPTY CHECK: Stop if no data
             if not records or len(records) == 0:
                 print(f"🏁 Reached the end at Page {page} (Empty Response).")
                 break
+                
+            # 2. INFINITE LOOP CHECK: Stop if the API sends the exact same data twice
+            if records == previous_batch:
+                print(f"⚠️ API is ignoring pagination and repeating data on page {page}. Breaking loop.")
+                break
 
+            # Add to our total list
             all_data.extend(records)
+            previous_batch = records # Save this batch to compare against the next one
+            
             print(f"📄 Page {page}: Found {len(records)} records (Total so far: {len(all_data)})")
             
-            # 3. Safety break: If API repeats the same data on a loop, stop
-            if len(all_data) > 20 and records[0] == all_data[-(len(records)+1)]:
-                print("⚠️ API is repeating data. Stopping to prevent loop.")
+            # 3. NORMAL STOP CHECK: Trust the API's last_page if it provides one reliably
+            last_page = data.get('last_page')
+            if last_page and page >= int(last_page):
+                print(f"🏁 Reached API reported last page ({last_page}).")
                 break
 
             page += 1
@@ -128,6 +139,10 @@ def fetch_paginated_data(url, params, label, skip_pages=None):
         except Exception as e:
             print(f"❌ Error on page {page}: {str(e)}")
             break
+
+    # If it hit the extreme hard limit, let us know
+    if page > max_pages:
+        print(f"🛑 Hit absolute safety limit of {max_pages} pages. If you have more than 100,000 records, increase max_pages.")
 
     print(f"✅ Finished {label}. Grand Total: {len(all_data)}")
     return all_data
@@ -198,13 +213,12 @@ students_params = {
 students_data = fetch_paginated_data(URLS['students'], students_params, "Students")
 upload_to_google_sheets(students_data, "students")
 
-# --- B. APPLICANTS (Deep Search) ---
+# --- B. APPLICANTS ---
 applicants_params = {
     "format": "json", 
     "per_page": 100, 
-    "from": "2025-01-01",  # Extreme date range to bypass date clipping
+    "from": "2025-01-01",  # Wide open date range
     "to": today 
-    # Notice "field": "name" is removed here to prevent 'preview mode'
 }
 applicants_data = fetch_paginated_data(URLS['applicants'], applicants_params, "Applicants", skip_pages=[1000])
 upload_to_google_sheets(applicants_data, "applicants")
