@@ -23,7 +23,8 @@ if datetime.now().strftime('%Y-%m-%d') > END_DATE:
 INSTITUTE_NAME = "Albuhuti"
 BASE_URL = "https://api.albuhutifiqh.com"
 LOGIN_URL = f"{BASE_URL}/api/login"
-GOOGLE_SHEET_ID = "1kSAzz5y5XZhvsmRDTEb7_jk3mo2_eJFjMTCrOhaDrN8"
+GOOGLE_SHEET_ID = "14gzPMTDZO-CZpMJCy1u5v6BN3wg6r4sjnaoq6vX2G-c"
+                   
 ADMIN_EMAIL = "admin@albuhutifiqh.com"
 ADMIN_PASSWORD = "DzMzn@$D3#Wg}z#t"
 
